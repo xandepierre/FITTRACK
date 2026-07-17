@@ -122,6 +122,15 @@
   .angle-filter{display:flex;gap:6px;margin-bottom:12px;}
   .angle-btn{flex:1;background:var(--surface-2);border:0.5px solid var(--border);color:var(--text-secondary);padding:8px 4px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;}
   .angle-btn.active{background:var(--accent);color:#fff;border-color:var(--accent);}
+
+  .week-dots{display:flex;gap:6px;margin-top:12px;justify-content:space-between;}
+  .week-dots .dot-wrap{display:flex;flex-direction:column;align-items:center;gap:4px;}
+  .week-dots .dot{width:22px;height:22px;border-radius:50%;background:var(--surface-2);border:1px solid var(--border);}
+  .week-dots .dot.feito{background:var(--accent);border-color:var(--accent);}
+  .week-dots .dia-label{font-size:9px;color:var(--text-muted);}
+
+  .water-bar-wrap{background:var(--surface-2);border-radius:8px;overflow:hidden;height:14px;}
+  .water-fill{height:100%;background:linear-gradient(90deg,#2d9ddc,#3ddc97);width:0%;transition:width 0.3s;}
   .gallery .item img{width:100%;height:100%;object-fit:cover;display:block;}
   .gallery .item .date{
     position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.6);
@@ -279,6 +288,14 @@
         </div>
         <p class="note" id="resumoObjetivo">Preencha e salve seu perfil acima pra ver o resumo aqui.</p>
       </div>
+
+      <div class="card">
+        <h2>Backup dos seus dados</h2>
+        <p class="note" style="margin-top:0;">Importante principalmente no iPhone: gere um backup de vez em quando (um arquivo .json) pra não correr risco de perder tudo se a Safari limpar os dados do site.</p>
+        <button class="ghost" onclick="exportarDados()" style="width:100%;margin-bottom:8px;">⬇️ Exportar backup (.json)</button>
+        <button class="ghost" onclick="document.getElementById('importInput').click()" style="width:100%;">⬆️ Importar backup (.json)</button>
+        <input type="file" id="importInput" accept="application/json" onchange="importarDados(this)">
+      </div>
     </section>
 
     <!-- PROGRESSO -->
@@ -342,6 +359,27 @@
           </div>
         </div>
       </div>
+      <div class="card">
+        <h2>Peso desta semana</h2>
+        <p class="note" style="margin-top:0;">Registre seu peso toda semana (ideal: junto com a foto, no mesmo dia) pra acompanhar a tendência real, sem se prender à variação de um dia só.</p>
+        <div class="row" style="align-items:end;">
+          <div class="field-group">
+            <label>Peso de hoje (kg)</label>
+            <input type="number" step="0.1" id="pesoSemanaInput" placeholder="ex: 77.8">
+          </div>
+          <div class="field-group">
+            <button class="primary" onclick="registrarPeso()" style="margin-bottom:14px;">Registrar</button>
+          </div>
+        </div>
+        <div id="graficoPesoWrap" style="display:none;">
+          <svg id="graficoPeso" viewBox="0 0 300 120" style="width:100%;height:auto;"></svg>
+        </div>
+        <p class="empty" id="pesoEmpty">Nenhum peso registrado ainda.</p>
+        <div id="checkinContent" style="display:none;">
+          <p class="note" id="checkinTexto"></p>
+        </div>
+      </div>
+
       <div class="card">
         <h2>Comparar duas semanas</h2>
         <p class="note" style="margin-top:0;">Filtra por ângulo abaixo, depois toca em duas fotos do histórico pra colocar lado a lado.</p>
@@ -437,10 +475,36 @@
           <p class="note" style="margin-top:10px;">Essa é uma orientação geral, não substitui avaliação de um médico ou nutricionista — principalmente se você tiver alguma condição renal, cardíaca ou fizer uso de outros medicamentos.</p>
         </div>
       </div>
+
+      <div class="card">
+        <h2>Água de hoje</h2>
+        <p class="note" style="margin-top:0;" id="metaAguaTexto">Preencha seu peso no Perfil pra calcularmos sua meta de água.</p>
+        <div class="water-bar-wrap">
+          <div class="water-bar"><div class="water-fill" id="aguaFill"></div></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;">
+          <div><span id="aguaAtual">0</span>ml <span style="color:var(--text-secondary);">de</span> <span id="aguaMeta">-</span>ml</div>
+          <div style="display:flex;gap:6px;">
+            <button class="ghost" onclick="ajustarAgua(-250)">-250ml</button>
+            <button class="ghost" onclick="ajustarAgua(250)">+250ml</button>
+          </div>
+        </div>
+      </div>
     </section>
 
     <!-- TREINO -->
     <section class="view" id="view-treino">
+      <div class="card">
+        <h2>Sequência de treinos</h2>
+        <div class="stat-grid" style="grid-template-columns:1fr 1fr;">
+          <div class="stat"><div class="n" id="streakAtual">0</div><div class="l">dias seguidos</div></div>
+          <div class="stat"><div class="n" id="streakSemana">0/7</div><div class="l">últimos 7 dias</div></div>
+        </div>
+        <button class="primary" id="btnMarcarTreino" onclick="marcarTreinoHoje()" style="margin-top:10px;">Marcar treino de hoje como feito</button>
+        <div class="week-dots" id="weekDots"></div>
+        <button class="ghost" onclick="baixarTreinoPDF()" style="margin-top:12px;width:100%;">🖨️ Baixar ficha de treino completa em PDF</button>
+      </div>
+
       <div class="card">
         <h2>Nutrição ao redor do treino</h2>
         <p class="empty" id="treinoNutriEmpty">Preencha seu horário de treino no Perfil pra alinharmos seu cardápio a ele.</p>
@@ -992,6 +1056,351 @@ function inserirIconesExercicios(){
   });
 }
 
+async function registrarPeso(){
+  const input = document.getElementById('pesoSemanaInput');
+  const valor = parseFloat(input.value);
+  if(!valor || valor <= 0){
+    alert('Digita um peso válido primeiro.');
+    return;
+  }
+  const timestamp = Date.now();
+  const dateLabel = new Date(timestamp).toLocaleDateString('pt-BR');
+  try{
+    await AppStorage.set('peso:'+timestamp, JSON.stringify({peso: valor, date: dateLabel, timestamp}), false);
+    input.value = '';
+    carregarHistoricoPeso();
+  }catch(e){
+    alert('Não consegui salvar esse peso agora. Tenta de novo.');
+  }
+}
+
+async function carregarHistoricoPeso(){
+  const wrap = document.getElementById('graficoPesoWrap');
+  const emptyMsg = document.getElementById('pesoEmpty');
+  const checkinContent = document.getElementById('checkinContent');
+  try{
+    const list = await AppStorage.list('peso:', false);
+    if(!list || !list.keys || list.keys.length === 0){
+      wrap.style.display = 'none';
+      checkinContent.style.display = 'none';
+      emptyMsg.style.display = 'block';
+      return;
+    }
+    const entradas = [];
+    for(const key of list.keys){
+      try{
+        const res = await AppStorage.get(key, false);
+        if(res && res.value) entradas.push(JSON.parse(res.value));
+      }catch(e){ /* ignora */ }
+    }
+    entradas.sort((a,b)=> a.timestamp - b.timestamp);
+    if(entradas.length === 0){
+      wrap.style.display = 'none';
+      checkinContent.style.display = 'none';
+      emptyMsg.style.display = 'block';
+      return;
+    }
+    emptyMsg.style.display = 'none';
+    desenharGraficoPeso(entradas);
+    wrap.style.display = 'block';
+    await atualizarCheckinSemanal(entradas);
+  }catch(e){
+    emptyMsg.style.display = 'block';
+    emptyMsg.textContent = 'Não consegui carregar seu histórico de peso agora.';
+  }
+}
+
+function desenharGraficoPeso(entradas){
+  const svg = document.getElementById('graficoPeso');
+  const pesos = entradas.map(e=>e.peso);
+  const min = Math.min(...pesos);
+  const max = Math.max(...pesos);
+  const margem = 10;
+  const largura = 300, altura = 120;
+  const faixa = Math.max(max - min, 1);
+
+  const pontos = entradas.map((e, i)=>{
+    const x = entradas.length === 1 ? largura/2 : margem + (i/(entradas.length-1)) * (largura - margem*2);
+    const y = altura - margem - ((e.peso - min)/faixa) * (altura - margem*2);
+    return {x, y, peso: e.peso, date: e.date};
+  });
+
+  const linha = pontos.map((p,i)=> (i===0?'M':'L') + p.x.toFixed(1) + ',' + p.y.toFixed(1)).join(' ');
+  const circulos = pontos.map(p=>
+    `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3" fill="var(--accent)"/>`
+  ).join('');
+  const primeiro = pontos[0];
+  const ultimo = pontos[pontos.length-1];
+
+  svg.innerHTML = `
+    <path d="${linha}" fill="none" stroke="var(--accent)" stroke-width="2"/>
+    ${circulos}
+    <text x="${primeiro.x}" y="${altura-1}" font-size="8" fill="var(--text-secondary)" text-anchor="start">${primeiro.date}</text>
+    <text x="${ultimo.x}" y="${altura-1}" font-size="8" fill="var(--text-secondary)" text-anchor="end">${ultimo.date}</text>
+    <text x="${ultimo.x}" y="${ultimo.y-6}" font-size="9" fill="var(--text)" text-anchor="end" font-weight="700">${ultimo.peso}kg</text>
+  `;
+}
+
+async function atualizarCheckinSemanal(entradas){
+  const checkinContent = document.getElementById('checkinContent');
+  const texto = document.getElementById('checkinTexto');
+  if(entradas.length < 3){
+    checkinContent.style.display = 'none';
+    return;
+  }
+  const ultimos3 = entradas.slice(-3);
+  const variacao = ultimos3[2].peso - ultimos3[0].peso;
+  let perfil = {};
+  try{
+    const res = await AppStorage.get('perfil', false);
+    if(res && res.value) perfil = JSON.parse(res.value);
+  }catch(e){ /* sem perfil ainda */ }
+  const objetivo = perfil.objetivo || 'estetica';
+  const querPerder = (objetivo === 'estetica' || objetivo === 'emagrecer' || objetivo === 'recomposicao');
+  const querGanhar = (objetivo === 'massa');
+  const estagnado = Math.abs(variacao) < 0.4;
+
+  let msg = '';
+  if(estagnado && querPerder){
+    msg = `⚠️ Seu peso está praticamente igual nas últimas 3 semanas (${ultimos3[0].peso}kg → ${ultimos3[2].peso}kg). Se o objetivo é perder gordura, talvez seja hora de reduzir um pouco as calorias ou revisar se está batendo o cardápio certinho.`;
+  } else if(estagnado && querGanhar){
+    msg = `⚠️ Seu peso está praticamente igual nas últimas 3 semanas (${ultimos3[0].peso}kg → ${ultimos3[2].peso}kg). Se o objetivo é ganhar massa, talvez valha aumentar um pouco as calorias.`;
+  } else if(querPerder && variacao < 0){
+    msg = `✅ Seu peso caiu de ${ultimos3[0].peso}kg pra ${ultimos3[2].peso}kg nas últimas 3 semanas. Está indo na direção certa pro seu objetivo — continue assim.`;
+  } else if(querGanhar && variacao > 0){
+    msg = `✅ Seu peso subiu de ${ultimos3[0].peso}kg pra ${ultimos3[2].peso}kg nas últimas 3 semanas. Está indo na direção certa pro seu objetivo — continue assim.`;
+  } else if(querPerder && variacao > 0){
+    msg = `⚠️ Seu peso subiu de ${ultimos3[0].peso}kg pra ${ultimos3[2].peso}kg nas últimas 3 semanas, mas o objetivo é perder gordura. Vale revisar a dieta e a adesão ao treino.`;
+  } else {
+    msg = `Seu peso foi de ${ultimos3[0].peso}kg pra ${ultimos3[2].peso}kg nas últimas 3 semanas.`;
+  }
+  texto.innerHTML = msg;
+  checkinContent.style.display = 'block';
+}
+
+function dataChaveHoje(offsetDias){
+  offsetDias = offsetDias || 0;
+  const d = new Date();
+  d.setDate(d.getDate() + offsetDias);
+  return d.toISOString().slice(0,10); // YYYY-MM-DD
+}
+
+async function marcarTreinoHoje(){
+  const chave = dataChaveHoje();
+  try{
+    await AppStorage.set('treino-log:'+chave, JSON.stringify({data: chave, feito: true}), false);
+    document.getElementById('btnMarcarTreino').textContent = '✓ Treino de hoje marcado';
+    document.getElementById('btnMarcarTreino').disabled = true;
+    await atualizarStreak();
+  }catch(e){
+    alert('Não consegui marcar o treino agora. Tenta de novo.');
+  }
+}
+
+async function atualizarStreak(){
+  const dias7 = [];
+  for(let i=6; i>=0; i--) dias7.push(dataChaveHoje(-i));
+
+  const feitos = {};
+  for(const chave of dias7){
+    try{
+      const res = await AppStorage.get('treino-log:'+chave, false);
+      feitos[chave] = !!(res && res.value);
+    }catch(e){
+      feitos[chave] = false;
+    }
+  }
+
+  let streak = 0;
+  for(let i=0; i<dias7.length; i++){
+    const chave = dias7[dias7.length-1-i];
+    if(feitos[chave]) streak++;
+    else break;
+  }
+
+  const totalSemana = Object.values(feitos).filter(Boolean).length;
+  document.getElementById('streakAtual').textContent = streak;
+  document.getElementById('streakSemana').textContent = totalSemana + '/7';
+
+  const labelsDias = ['D','S','T','Q','Q','S','S'];
+  document.getElementById('weekDots').innerHTML = dias7.map(chave=>{
+    const diaSemana = new Date(chave+'T12:00:00').getDay();
+    return `<div class="dot-wrap"><div class="dot ${feitos[chave]?'feito':''}"></div><div class="dia-label">${labelsDias[diaSemana]}</div></div>`;
+  }).join('');
+
+  const btn = document.getElementById('btnMarcarTreino');
+  if(feitos[dataChaveHoje()]){
+    btn.textContent = '✓ Treino de hoje marcado';
+    btn.disabled = true;
+  } else {
+    btn.textContent = 'Marcar treino de hoje como feito';
+    btn.disabled = false;
+  }
+}
+
+async function ajustarAgua(delta){
+  const chave = 'agua:' + dataChaveHoje();
+  let atual = 0;
+  try{
+    const res = await AppStorage.get(chave, false);
+    if(res && res.value) atual = JSON.parse(res.value).ml || 0;
+  }catch(e){ /* começa do zero */ }
+  atual = Math.max(0, atual + delta);
+  try{
+    await AppStorage.set(chave, JSON.stringify({ml: atual, data: dataChaveHoje()}), false);
+  }catch(e){
+    alert('Não consegui salvar a água agora.');
+    return;
+  }
+  atualizarBarraAgua(atual);
+}
+
+function atualizarBarraAgua(atual){
+  const metaEl = document.getElementById('aguaMeta');
+  const meta = parseInt(metaEl.dataset.metaMl || '2500', 10);
+  document.getElementById('aguaAtual').textContent = atual;
+  const pct = Math.min(100, (atual/meta)*100);
+  document.getElementById('aguaFill').style.width = pct + '%';
+}
+
+async function atualizarMetaAgua(perfil){
+  const metaTexto = document.getElementById('metaAguaTexto');
+  const metaEl = document.getElementById('aguaMeta');
+  if(!perfil || !perfil.peso){
+    metaTexto.textContent = 'Preencha seu peso no Perfil pra calcularmos sua meta de água.';
+    metaEl.textContent = '-';
+    return;
+  }
+  const meta = Math.round(perfil.peso * 35); // ~35ml por kg
+  metaEl.textContent = meta;
+  metaEl.dataset.metaMl = meta;
+  metaTexto.textContent = 'Meta calculada pelo seu peso (~35ml por kg). Vale mais nos dias de treino ou calor forte.';
+
+  let atual = 0;
+  try{
+    const res = await AppStorage.get('agua:'+dataChaveHoje(), false);
+    if(res && res.value) atual = JSON.parse(res.value).ml || 0;
+  }catch(e){ /* zero hoje ainda */ }
+  atualizarBarraAgua(atual);
+}
+
+async function baixarTreinoPDF(){
+  if(!window.jspdf){
+    alert('O gerador de PDF ainda está carregando. Espera 2 segundos e tenta de novo.');
+    return;
+  }
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+  const margemEsq = 14, larguraUtil = 182;
+  let y = 20;
+
+  doc.setFontSize(16);
+  doc.text('Ficha de treino — 6 dias', margemEsq, y);
+  y += 8;
+  doc.setDrawColor(200);
+  doc.line(margemEsq, y, margemEsq+larguraUtil, y);
+  y += 8;
+
+  function garantirEspaco(minimo){
+    if(y > 280 - minimo){
+      doc.addPage();
+      y = 20;
+    }
+  }
+
+  document.querySelectorAll('#view-treino .day-card').forEach(card=>{
+    const titulo = card.querySelector('.day-title').textContent.trim();
+    const focoEl = card.querySelector('.day-focus');
+    const foco = focoEl ? focoEl.textContent.trim() : '';
+    garantirEspaco(24);
+    doc.setFontSize(13);
+    doc.setFont(undefined,'bold');
+    doc.text(titulo, margemEsq, y);
+    doc.setFont(undefined,'normal');
+    y += 6;
+    if(foco){
+      doc.setFontSize(9);
+      doc.setTextColor(120);
+      doc.text(foco, margemEsq, y);
+      doc.setTextColor(0);
+      y += 6;
+    }
+    doc.setFontSize(10.5);
+    card.querySelectorAll('table tr').forEach(tr=>{
+      const cells = tr.querySelectorAll('td');
+      if(cells.length < 2) return;
+      const nome = cells[0].textContent.trim();
+      const series = cells[1].textContent.trim();
+      garantirEspaco(6);
+      doc.text('•  ' + nome, margemEsq+2, y);
+      doc.text(series, margemEsq+larguraUtil, y, {align:'right'});
+      y += 5.5;
+    });
+    y += 4;
+  });
+
+  try{
+    const blobUrl = doc.output('bloburl');
+    const nova = window.open(blobUrl, '_blank');
+    if(!nova){
+      alert('Seu navegador bloqueou a aba do PDF. Permite pop-ups pra esse site e clica no botão de novo.');
+    }
+  }catch(e){
+    doc.save('ficha-treino-fittrack.pdf');
+  }
+}
+
+async function exportarDados(){
+  try{
+    const list = await AppStorage.list(undefined, false);
+    const dados = {};
+    for(const key of (list.keys || [])){
+      try{
+        const res = await AppStorage.get(key, false);
+        if(res && res.value !== undefined) dados[key] = res.value;
+      }catch(e){ /* ignora item corrompido */ }
+    }
+    const payload = {app:'fittrack', versao:1, exportadoEm: new Date().toISOString(), dados};
+    const blob = new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'fittrack-backup-' + dataChaveHoje() + '.json';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url), 3000);
+  }catch(e){
+    alert('Não consegui gerar o backup agora. Tenta de novo.');
+  }
+}
+
+async function importarDados(input){
+  const file = input.files[0];
+  if(!file) return;
+  try{
+    const texto = await file.text();
+    const payload = JSON.parse(texto);
+    if(!payload || !payload.dados){
+      alert('Esse arquivo não parece ser um backup válido do FitTrack.');
+      input.value = '';
+      return;
+    }
+    if(!confirm('Isso vai substituir os dados salvos aqui pelos desse backup. Quer continuar?')){
+      input.value = '';
+      return;
+    }
+    for(const [key, value] of Object.entries(payload.dados)){
+      await AppStorage.set(key, value, false);
+    }
+    input.value = '';
+    alert('Backup importado! O app vai recarregar agora.');
+    location.reload();
+  }catch(e){
+    alert('Não consegui ler esse arquivo. Confirma se é um backup exportado pelo FitTrack.');
+  }
+}
+
 function toggleRestricaoTexto(){
   const val = document.getElementById('p-restricao').value;
   document.getElementById('p-restricao-texto').style.display = (val === 'especifica') ? 'block' : 'none';
@@ -1022,6 +1431,7 @@ async function salvarPerfil(){
     atualizarPoseGuide(perfil);
     calcularDieta(perfil);
     atualizarNutricaoTreino(perfil);
+    atualizarMetaAgua(perfil);
   }catch(e){
     alert('Não consegui salvar seu perfil agora. Tenta de novo.');
   }
@@ -1177,6 +1587,7 @@ async function carregarPerfil(){
       atualizarPoseGuide(perfil);
       calcularDieta(perfil);
       atualizarNutricaoTreino(perfil);
+      atualizarMetaAgua(perfil);
     }
   }catch(e){
     // sem perfil salvo ainda, tudo bem
@@ -1404,6 +1815,8 @@ if('serviceWorker' in navigator){
 }
 atualizarPoseGuide({sexo:'masculino'});
 inserirIconesExercicios();
+carregarHistoricoPeso();
+atualizarStreak();
 carregarPerfil();
 carregarFotosIniciais();
 carregarGaleriaProgresso();
